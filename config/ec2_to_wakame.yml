@@ -1,0 +1,6 @@
+web_api_location: '127.0.0.1'
+web_api_port: 9001
+
+host_node_id: 'hp-demonet'
+
+network_pool_id: 'nw-demonet'
