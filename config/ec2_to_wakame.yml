@@ -4,3 +4,5 @@ web_api_port: 9001
 host_node_id: 'hp-demonet'
 
 network_pool_id: 'nw-demonet'
+
+max_instances_to_start: 5
