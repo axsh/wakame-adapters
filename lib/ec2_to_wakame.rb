@@ -14,6 +14,7 @@ module Adapters
     
     before do
       @config = YAML.load_file(File.expand_path('../../config/ec2_to_wakame.yml', __FILE__))
+      @w_api = "http://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api"
     end
     
     get '/' do
@@ -30,17 +31,14 @@ module Adapters
     # InstanceType
     # Placement.GroupName
     post '/RunInstances' do
-      #TODO: Check parameters for validity
       w_params = {}
       w_params[:image_id]         = params[:ImageId]
       w_params[:instance_spec_id] = params[:InstanceType]
-      w_params[:nf_group]         = params[:SecurityGroup]
+      w_params[:nf_group]         = amazon_list_to_array("SecurityGroup",params)
       w_params[:user_data]        = params[:UserData]
       
       w_params[:host_pool_id]  = @config["host_node_id"]
       w_params[:network_id]    = @config["network_pool_id"]
-      
-      w_api = URI.parse("http://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api/instances")
       
       # Start only 1 instance if MinCount and MaxCount aren't set
       params[:MinCount] = 1 if params[:MinCount].nil?
@@ -58,88 +56,290 @@ module Adapters
         end
       end
       
-      new_instance_ids = []
+      create_res = []
       (1..instances_to_start).each { |i|
-        create_req = Net::HTTP::Post.new(w_api.path)
-        create_req.add_field("X_VDC_ACCOUNT_UUID", params[:AWSAccessKeyId])
-        
-        create_req.body = ""
-        create_req.form_data = w_params
-
-        create_res = Net::HTTP.new(w_api.host, w_api.port).start do |http|
-          http.request(create_req)
-        end
-        new_instance_ids << JSON.parse(create_res.body)["id"]
-        p "starting instance: #{new_instance_ids[i-1]}"
-        sleep 1
+        create_res << make_request("#{@w_api}/instances",Net::HTTP::Post,params[:AWSAccessKeyId],w_params)
       }
       
-      #run_instances_response(JSON.parse(res.body)["id"])
-      
-      # Get all the info we need to construct the EC2 response for started instances
-      describe_req = Net::HTTP::Get.new(w_api.path)
-      describe_req.add_field("X_VDC_ACCOUNT_UUID", params[:AWSAccessKeyId])
-      describe_req.body = ""
-      describe_res = Net::HTTP.new(w_api.host, w_api.port).start do |http|
-        http.request(describe_req)
-      end
-      
-      inst_maps = JSON.parse(describe_res.body).first["results"]
-      inst_maps.delete_if { |inst|
-        not new_instance_ids.member?  inst["id"]
-      }
+      inst_maps = create_res.map { |res| JSON.parse(res.body) }.flatten
       
       run_instances_response(params[:AWSAccessKeyId],inst_maps)
     end
     
+    #EC2 Parameters
+    # InstanceId.n
+    post '/TerminateInstances' do
+      insts = amazon_list_to_array("InstanceId",params)
+      insts.each { |inst|
+        delete_res = make_request("#{@w_api}/instances/#{inst}",Net::HTTP::Delete,params[:AWSAccessKeyId])
+      }
+      
+      #TODO: Check response for errors
+      #TODO: vnics don't get removed from hva node... investigate!
+      
+      terminate_instances_response(insts)
+    end
+    
+    #Params
+    # InstanceId.n
+    #TODO: Describe all instances if no id is given
+    post '/DescribeInstances' do
+      insts = amazon_list_to_array("InstanceId",params)
+
+      show_res = make_request("#{@w_api}/instances",Net::HTTP::Get,params[:AWSAccessKeyId])
+      
+      res = JSON.parse(show_res.body).first["results"]
+      descs = []
+      res.each { |r|
+        descs << r if insts.member?(r["id"])
+      }
+      
+      describe_instances_response(params[:AWSAccessKeyId],descs)
+    end
+    
+    #Params
+    # InstanceId.n
+    post '/DescribeImages' do
+      res = make_request("#{@w_api}/images",Net::HTTP::Get,params[:AWSAccessKeyId])
+      
+      imgs = amazon_list_to_array("ImageId",params)
+      wakame_imgs = JSON.parse(res.body).first["results"]
+      
+      wakame_imgs.delete_if { |w_img|
+        not imgs.member?(w_img["id"])
+      }
+      
+      describe_images_response(wakame_imgs)
+    end
+    
     private
+    
+    def make_request(uri,type,accesskey,form_data = nil)
+      api = URI.parse(uri)
+
+      req = type.new(api.path)
+      req.add_field("X_VDC_ACCOUNT_UUID", accesskey)
+      
+      req.body = ""
+      req.form_data = form_data unless form_data.nil?
+
+      res = Net::HTTP.new(api.host, api.port).start do |http|
+        http.request(req)
+      end
+      
+      res
+    end
+    
+    # mask = 'Group'
+    # params = {Group.1 = "joske", Group.2 = "jefke", Group.3 = "jantje"}
+    #
+    # Values in _params_ that don't conform to _mask_ will be ignored
+    # 
+    # ["joske", "jefke", "jantje"]
+    def amazon_list_to_array(mask,params)
+      arr = []
+      i = 1
+      params.each { |key,value|
+        if key == "#{mask}.#{i}"
+          arr << value
+          i += 1
+        end
+      }
+      arr
+    end
+    
     def trim_uuid(uuid)
       raise ArgumentError, "uuid must be a String" unless uuid.is_a? String
       uuid.split("-").last
     end
     
+    def describe_images_response(img_maps)
+      ERB.new(<<__END, nil, '-').result(binding)
+<DescribeImagesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
+  <requestId></requestId> 
+  <imagesSet>
+<%- img_maps.each { |img_map| -%>
+    <item>
+      <imageId><%=img_map["id"]%></imageId>
+      <imageLocation><%=img_map["source"]%></imageLocation>
+      <imageState><%=img_map["state"]%></imageState>
+      <imageOwnerId><%=img_map["account_id"]%></imageOwnerId>
+      <isPublic><%=img_map["is_public"]%></isPublic>
+      <architecture><%=img_map["arch"]%></architecture>
+      <imageType></imageType>
+      <kernelId></kernelId>
+      <ramdiskId></ramdiskId>
+      <imageOwnerAlias></imageOwnerAlias>
+      <name></name>
+      <description><%=img_map["description"]%></description>
+      <rootDeviceType></rootDeviceType>
+      <rootDeviceName></rootDeviceName>
+      <blockDeviceMapping>
+        <item>
+          <deviceName></deviceName>
+          <ebs>
+            <snapshotId></snapshotId>
+            <volumeSize></volumeSize>
+            <deleteOnTermination></deleteOnTermination>
+          </ebs>
+        </item>
+      </blockDeviceMapping>
+      <virtualizationType></virtualizationType>
+      <tagSet/>
+      <hypervisor><%=self.class::Hypervisor%></hypervisor>
+    </item>
+<%- } -%>
+  </imagesSet>
+</DescribeImagesResponse>
+__END
+    end
+    
+    def describe_instances_response(account_id,inst_maps)
+      ERB.new(<<__END, nil, '-').result(binding)
+<DescribeInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
+  <requestId></requestId>
+  <reservationSet>
+<%- inst_maps.each { |inst_map| -%>
+    <item>
+      <reservationId></reservationId>
+      <ownerId><%=account_id%></ownerId>
+      <groupSet>
+<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
+        <item>
+          <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
+          <groupName><%=group%></groupName>
+        </item>
+<%- } -%>
+      </groupSet>
+      <instancesSet>
+        <item>
+          <instanceId><%=inst_map["id"]%></instanceId>
+          <imageId><%=inst_map["image_id"]%></imageId>
+          <instanceState>
+            <code></code>
+            <name><%=inst_map["status"]%></name>
+          </instanceState>
+          <privateDnsName><%=inst_map["network"].first["dns_name"] unless inst_map["network"].nil? || inst_map["network"].empty?%></privateDnsName>
+          <dnsName><%=inst_map["network"].first["nat_dns_name"] unless inst_map["network"].nil? || inst_map["network"].empty?%></dnsName>
+          <reason/>
+          <keyName><%=inst_map["ssh_key_pair"]%></keyName>
+          <amiLaunchIndex></amiLaunchIndex>
+          <productCodes/>
+          <instanceType><%=inst_map["instance_spec_id"]%></instanceType>
+          <launchTime><%=inst_map["created_at"]%></launchTime>
+          <placement>
+            <availabilityZone><%=inst_map["host_node"]%></availabilityZone>
+            <groupName/>
+          </placement>
+          <kernelId></kernelId>
+          <ramdiskId></ramdiskId>
+          <monitoring>
+            <state></state>
+          </monitoring>
+          <privateIpAddress><%=inst_map["vif"].first["ipv4"]["address"] unless inst_map["vif"].nil? || inst_map["vif"].empty?%></privateIpAddress>
+          <ipAddress><%=inst_map["vif"].first["ipv4"]["nat_address"] unless inst_map["vif"].nil? || inst_map["vif"].empty?%></ipAddress>
+          <sourceDestCheck></sourceDestCheck>
+          <groupSet>
+<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
+            <item>
+              <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
+              <groupName><%=group%></groupName>
+            </item>
+<%- } -%>
+          </groupSet>
+          <architecture><%=inst_map["arch"]%></architecture>
+          <rootDeviceType></rootDeviceType>
+          <rootDeviceName></rootDeviceName>
+          <blockDeviceMapping>
+            <item>
+              <deviceName></deviceName>
+              <ebs>
+                <volumeId></volumeId>
+                <status></status>
+                <attachTime></attachTime>
+                <deleteOnTermination></deleteOnTermination>
+              </ebs>
+            </item>
+          </blockDeviceMapping>
+          <instanceLifecycle></instanceLifecycle>
+          <spotInstanceRequestId></spotInstanceRequestId>
+          <virtualizationType></virtualizationType>
+          <clientToken/>
+          <tagSet/>
+          <hypervisor><%=self.class::Hypervisor%></hypervisor>
+       </item>
+      </instancesSet>
+      <requesterId></requesterId>
+    </item>
+<%- } -%>
+  </reservationSet>
+</DescribeInstancesResponse>
+__END
+    end
+    
+    def terminate_instances_response(inst_maps)
+      ERB.new(<<__END, nil, '-').result(binding)
+<TerminateInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
+  <requestId></requestId> 
+  <instancesSet>
+<%- inst_maps.each { |inst_map| -%>
+    <item>
+      <instanceId><%=inst_map%></instanceId>
+      <currentState>
+        <code></code>
+        <name></name>
+      </currentState>
+      <previousState>
+        <code></code>
+        <name></name>
+      </previousState>
+    </item>
+<%- } -%>
+  </instancesSet>
+</TerminateInstancesResponse>
+__END
+    end
+    
     def run_instances_response(account_id,inst_maps)
-      #insts = instance_ids.map { |instance_id| Models::Instance[instance_id] }.compact
-
       ERB.new(<<__END, nil, '-').result(binding)
 <RunInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
   <requestId></requestId>
   <reservationId></reservationId>
   <ownerId><%= account_id %></ownerId>
   <groupSet>
-<%- inst_maps.first["netfilter_group"].each { |group| -%>
-    <item>
-      <groupId></groupId>
-      <groupName><%=group%></groupName>
-    </item>
+<%- inst_maps.first["netfilter_group"].each_with_index { |group,i| -%>
+      <item>
+        <groupId><%=inst_maps.first["netfilter_group_id"][i]%></groupId>
+        <groupName><%=group%></groupName>
+      </item>
 <%- } -%>
   </groupSet>
   <instancesSet>
-<%- inst_maps.each { |inst| -%>
+<%- inst_maps.each { |inst_map| -%>
     <item>
-      <instanceId><%=inst["id"]%></instanceId>
-      <imageId><%=inst["image_id"]%></imageId>
+      <instanceId><%=inst_map["id"]%></instanceId>
+      <imageId><%=inst_map["image_id"]%></imageId>
       <instanceState>
         <code></code>
-        <name><%=inst["status"]%></name>
+        <name><%=inst_map["status"]%></name>
       </instanceState>
-      <privateDnsName></privateDnsName>
-      <dnsName></dnsName>
-      <keyName><%=inst["ssh_key_pair"]%></keyName>
+      <privateDnsName><%=inst_map["network"].first["dns_name"] unless inst_map["network"].nil? || inst_map["network"].empty?%></privateDnsName>
+      <dnsName><%=inst_map["network"].first["nat_dns_name"] unless inst_map["network"].nil? || inst_map["network"].empty?%></dnsName>
+      <keyName><%=inst_map["ssh_key_pair"]%></keyName>
       <amiLaunchIndex></amiLaunchIndex>
-      <instanceType></instanceType>
-      <launchTime><%=inst["created_at"]%></launchTime>
+      <instanceType><%=inst_map["instance_spec_id"]%></instanceType>
+      <launchTime><%=inst_map["created_at"]%></launchTime>
       <placement>
-        <availabilityZone></availabilityZone>
+        <availabilityZone><%=inst_map["host_node"]%></availabilityZone>
       </placement>
       <monitoring>
         <enabled></enabled>
       </monitoring>
       <sourceDestCheck></sourceDestCheck>
       <groupSet>
-<%- inst["netfilter_group"].each { |group| -%>
+<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
          <item>
-            <groupId></groupId>
+            <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
             <groupName><%=group%></groupName>
          </item>
 <%- } -%>
