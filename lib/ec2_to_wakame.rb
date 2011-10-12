@@ -5,6 +5,24 @@ require 'net/http'
 require 'json'
 require 'yaml'
 
+module Net
+  module HTTPHeader
+    # Monkey patch to fix arrays in form_data
+    def set_form_data(params, sep = '&')
+      self.body = params.map {|k,v|
+        if v.is_a?(Array)
+          v.map { |vv|
+            "#{urlencode("#{k.to_s}[]")}=#{urlencode(vv.to_s)}"
+          }
+        else
+          "#{urlencode(k.to_s)}=#{urlencode(v.to_s)}"
+        end
+      }.flatten.join(sep)
+      self.content_type = 'application/x-www-form-urlencoded'
+    end
+  end
+end
+
 module Adapters
   class EC2ToWakame < Sinatra::Base
     Hypervisor = "kvm"
@@ -121,7 +139,7 @@ module Adapters
       req.add_field("X_VDC_ACCOUNT_UUID", accesskey)
       
       req.body = ""
-      req.form_data = form_data unless form_data.nil?
+      req.set_form_data(form_data) unless form_data.nil?
 
       res = Net::HTTP.new(api.host, api.port).start do |http|
         http.request(req)
