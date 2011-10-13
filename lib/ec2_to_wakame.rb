@@ -56,7 +56,7 @@ module Adapters
       w_params = {}
       w_params[:image_id]         = params[:ImageId]
       w_params[:instance_spec_id] = params[:InstanceType]
-      w_params[:nf_group]         = amazon_list_to_array("SecurityGroup",params)
+      w_params[:nf_group]         = amazon_list_to_array("SecurityGroupId",params)
       w_params[:user_data]        = params[:UserData]
       
       w_params[:host_pool_id]  = @config["host_node_id"]
