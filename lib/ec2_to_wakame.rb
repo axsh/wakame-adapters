@@ -39,6 +39,10 @@ module Adapters
       ''
     end
     
+    post '/' do
+      self.send(params["Action"],params)
+    end
+    
     #EC2 Parameters
     # ImageId
     # MinCount
@@ -48,7 +52,7 @@ module Adapters
     # UserData
     # InstanceType
     # Placement.GroupName
-    post '/RunInstances' do
+    def RunInstances(params)
       w_params = {}
       w_params[:image_id]         = params[:ImageId]
       w_params[:instance_spec_id] = params[:InstanceType]
@@ -86,8 +90,9 @@ module Adapters
     
     #EC2 Parameters
     # InstanceId.n
-    post '/TerminateInstances' do
+    def TerminateInstances(params)
       insts = amazon_list_to_array("InstanceId",params)
+      
       insts.each { |inst|
         delete_res = make_request("#{@w_api}/instances/#{inst}",Net::HTTP::Delete,params[:AWSAccessKeyId])
       }
@@ -101,7 +106,7 @@ module Adapters
     #Params
     # InstanceId.n
     #TODO: Describe all instances if no id is given
-    post '/DescribeInstances' do
+    def DescribeInstances(params)
       insts = amazon_list_to_array("InstanceId",params)
 
       show_res = make_request("#{@w_api}/instances",Net::HTTP::Get,params[:AWSAccessKeyId])
@@ -115,13 +120,12 @@ module Adapters
           descs << r if insts.member?(r["id"])
         }
       end
-      
       describe_instances_response(params[:AWSAccessKeyId],descs)
     end
     
     #Params
     # InstanceId.n
-    post '/DescribeImages' do
+    def DescribeImages(params)
       res = make_request("#{@w_api}/images",Net::HTTP::Get,params[:AWSAccessKeyId])
       
       imgs = amazon_list_to_array("ImageId",params)
@@ -258,8 +262,8 @@ __END
           <monitoring>
             <state></state>
           </monitoring>
-          <privateIpAddress><%=inst_map["vif"].first["ipv4"]["address"] unless inst_map["vif"].nil? || inst_map["vif"].empty?%></privateIpAddress>
-          <ipAddress><%=inst_map["vif"].first["ipv4"]["nat_address"] unless inst_map["vif"].nil? || inst_map["vif"].empty?%></ipAddress>
+          <privateIpAddress><%=inst_map["vif"].first["ipv4"]["address"] unless inst_map["vif"].nil? || inst_map["vif"].empty? || inst_map["vif"].first["ipv4"].nil? %></privateIpAddress>
+          <ipAddress><%=inst_map["vif"].first["ipv4"]["nat_address"] unless inst_map["vif"].nil? || inst_map["vif"].empty? || inst_map["vif"].first["ipv4"].nil? %></ipAddress>
           <sourceDestCheck></sourceDestCheck>
           <groupSet>
 <%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
