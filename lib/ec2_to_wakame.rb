@@ -108,9 +108,13 @@ module Adapters
       
       res = JSON.parse(show_res.body).first["results"]
       descs = []
-      res.each { |r|
-        descs << r if insts.member?(r["id"])
-      }
+      if insts.empty?
+        descs = res
+      else
+        res.each { |r|
+          descs << r if insts.member?(r["id"])
+        }
+      end
       
       describe_instances_response(params[:AWSAccessKeyId],descs)
     end
@@ -125,7 +129,7 @@ module Adapters
       
       wakame_imgs.delete_if { |w_img|
         not imgs.member?(w_img["id"])
-      }
+      } unless imgs.empty?
       
       describe_images_response(wakame_imgs)
     end
