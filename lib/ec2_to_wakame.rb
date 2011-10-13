@@ -40,7 +40,11 @@ module Adapters
     end
     
     post '/' do
-      self.send(params["Action"],params)
+      begin
+        self.send(params["Action"],params)
+      rescue NoMethodError
+        "Error: Unsupported Action: #{params["Action"]}\n"
+      end
     end
     
     #EC2 Parameters
