@@ -241,14 +241,7 @@ __END
     <item>
       <reservationId></reservationId>
       <ownerId><%=account_id%></ownerId>
-      <groupSet>
-<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
-        <item>
-          <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
-          <groupName><%=group%></groupName>
-        </item>
-<%- } -%>
-      </groupSet>
+      <groupSet/>
       <instancesSet>
         <item>
           <instanceId><%=inst_map["id"]%></instanceId>
@@ -267,7 +260,7 @@ __END
           <launchTime><%=inst_map["created_at"]%></launchTime>
           <placement>
             <availabilityZone><%=inst_map["host_node"]%></availabilityZone>
-            <groupName><%=inst_map["host_node"] # Change this by host_node_name when that field is added %></groupName>
+            <groupName><%=inst_map["host_node"]%></groupName>
           </placement>
           <kernelId></kernelId>
           <ramdiskId></ramdiskId>
@@ -344,14 +337,7 @@ __END
   <requestId></requestId>
   <reservationId></reservationId>
   <ownerId><%= account_id %></ownerId>
-  <groupSet>
-<%- inst_maps.first["netfilter_group"].each_with_index { |group,i| -%>
-      <item>
-        <groupId><%=inst_maps.first["netfilter_group_id"][i]%></groupId>
-        <groupName><%=group%></groupName>
-      </item>
-<%- } -%>
-  </groupSet>
+  <groupSet/>
   <instancesSet>
 <%- inst_maps.each { |inst_map| -%>
     <item>
