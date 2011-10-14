@@ -12,4 +12,4 @@ network_pool_id: 'nw-demonet'
 max_instances_to_start: 5
 
 # If set to true, the adapter outputs the parameters of any post requests for debugging purposes.
-verbose_requests: false
+verbose_requests: true

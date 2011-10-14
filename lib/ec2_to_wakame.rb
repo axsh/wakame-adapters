@@ -36,7 +36,13 @@ module Adapters
     end
     
     get '/' do
-      ''
+      p params if @config["verbose_requests"]
+    
+      begin
+        self.send(params["Action"],params)
+      rescue NoMethodError
+        "Error: Unsupported Action: #{params["Action"]}\n"
+      end
     end
     
     post '/' do
@@ -261,7 +267,7 @@ __END
           <launchTime><%=inst_map["created_at"]%></launchTime>
           <placement>
             <availabilityZone><%=inst_map["host_node"]%></availabilityZone>
-            <groupName/>
+            <groupName><%=inst_map["host_node"] # Change this by host_node_name when that field is added %></groupName>
           </placement>
           <kernelId></kernelId>
           <ramdiskId></ramdiskId>
