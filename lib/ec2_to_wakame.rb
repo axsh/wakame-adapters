@@ -32,7 +32,7 @@ module Adapters
     
     before do
       @config = YAML.load_file(File.expand_path('../../config/ec2_to_wakame.yml', __FILE__))
-      @w_api = "http://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api"
+      @w_api  = "http://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api"
     end
     
     get '/' do
@@ -40,6 +40,8 @@ module Adapters
     end
     
     post '/' do
+      p params if @config["verbose_requests"]
+    
       begin
         self.send(params["Action"],params)
       rescue NoMethodError
