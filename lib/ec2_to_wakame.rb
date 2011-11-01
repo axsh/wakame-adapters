@@ -2,6 +2,7 @@
 
 require 'sinatra/base'
 require 'net/http'
+require 'net/https'
 require 'json'
 require 'yaml'
 
@@ -32,7 +33,7 @@ module Adapters
     
     before do
       @config = YAML.load_file(File.expand_path('../../config/ec2_to_wakame.yml', __FILE__))
-      @w_api  = "http://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api"
+      @w_api  = "#{ {true => "https", false => "http"}[@config["use_ssl"]] }://#{@config["web_api_location"]}:#{@config["web_api_port"]}/api"
     end
     
     get '/' do
@@ -161,7 +162,10 @@ module Adapters
       req.body = ""
       req.set_form_data(form_data) unless form_data.nil?
 
-      res = Net::HTTP.new(api.host, api.port).start do |http|
+      session = Net::HTTP.new(api.host, api.port)
+      session.use_ssl = @config["use_ssl"]
+
+      res = session.start do |http|
         http.request(req)
       end
       
