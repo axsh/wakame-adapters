@@ -64,7 +64,6 @@ module Adapters
     # SecurityGroup []
     # UserData
     # InstanceType
-    # Placement.GroupName
     def RunInstances(params)
       w_params = {}
       w_params[:image_id]         = params[:ImageId]
@@ -72,7 +71,7 @@ module Adapters
       w_params[:nf_group]         = amazon_list_to_array("SecurityGroupId",params)
       w_params[:user_data]        = params[:UserData]
       
-      w_params[:host_pool_id]  = @config["host_node_id"]
+      w_params[:host_id]  = params["Placement.AvailabilityZone"]
       w_params[:network_id]    = @config["network_pool_id"]
       
       # Start only 1 instance if MinCount and MaxCount aren't set
