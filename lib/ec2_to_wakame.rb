@@ -61,7 +61,7 @@ module Adapters
     # MinCount
     # MaxCount
     # KeyName
-    # SecurityGroup []
+    # SecurityGroup.n
     # UserData
     # InstanceType
     # Placement.AvailabilityZone
@@ -97,7 +97,7 @@ module Adapters
       }
       
       inst_maps = create_res.map { |res| JSON.parse(res.body) }.flatten
-      
+
       run_instances_response(params[:AWSAccessKeyId],inst_maps)
     end
     
@@ -111,14 +111,12 @@ module Adapters
       }
       
       #TODO: Check response for errors
-      #TODO: vnics don't get removed from hva node... investigate!
       
       terminate_instances_response(insts)
     end
     
     #Params
     # InstanceId.n
-    #TODO: Describe all instances if no id is given
     def DescribeInstances(params)
       insts = amazon_list_to_array("InstanceId",params)
 
@@ -341,7 +339,13 @@ __END
   <requestId></requestId>
   <reservationId></reservationId>
   <ownerId><%= account_id %></ownerId>
-  <groupSet/>
+  <groupSet>
+<%- inst_maps.first["netfilter_group"].each_with_index { |group,i| -%>
+      <item>
+        <groupId><%=inst_maps.first["netfilter_group_id"][i]%></groupId>
+      </item>
+<%- } -%>
+  </groupSet>
   <instancesSet>
 <%- inst_maps.each { |inst_map| -%>
     <item>
@@ -364,14 +368,7 @@ __END
         <enabled></enabled>
       </monitoring>
       <sourceDestCheck></sourceDestCheck>
-      <groupSet>
-<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
-         <item>
-            <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
-            <groupName><%=group%></groupName>
-         </item>
-<%- } -%>
-      </groupSet>
+      <groupSet/>
       <virtualizationType></virtualizationType>
       <clientToken/>
       <tagSet/>
