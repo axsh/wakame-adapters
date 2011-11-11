@@ -73,7 +73,7 @@ module Adapters
       w_params[:instance_spec_id] = params[:InstanceType]
       w_params[:nf_group]         = amazon_list_to_array("SecurityGroup",params)
       w_params[:user_data]        = params[:UserData]
-      w_params[:ssh_key]          = params[:KeyName]
+      w_params[:ssh_key_id]       = params[:KeyName]
       
       w_params[:host_id]  = params["Placement.AvailabilityZone"]
       w_params[:network_id]    = @config["network_pool_id"]
@@ -337,7 +337,6 @@ __END
     end
     
     def run_instances_response(account_id,inst_maps)
-      p inst_maps
       ERB.new(<<__END, nil, '-').result(binding)
 <RunInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
   <requestId></requestId>
