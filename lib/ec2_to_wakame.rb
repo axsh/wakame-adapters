@@ -41,7 +41,8 @@ module Adapters
     
       begin
         self.send(params["Action"],params)
-      rescue NoMethodError
+      rescue NoMethodError => e
+        raise unless params["Action"] == e.name.to_s
         "Error: Unsupported Action: #{params["Action"]}\n"
       end
     end
@@ -51,7 +52,8 @@ module Adapters
     
       begin
         self.send(params["Action"],params)
-      rescue NoMethodError
+      rescue NoMethodError => e
+        raise unless params["Action"] == e.name.to_s
         "Error: Unsupported Action: #{params["Action"]}\n"
       end
     end
@@ -274,10 +276,10 @@ __END
           <ipAddress><%=inst_map["vif"].first["ipv4"]["nat_address"] unless inst_map["vif"].nil? || inst_map["vif"].empty? || inst_map["vif"].first["ipv4"].nil? %></ipAddress>
           <sourceDestCheck></sourceDestCheck>
           <groupSet>
-<%- inst_map["netfilter_group"].each_with_index { |group,i| -%>
+<%- inst_map["netfilter_groups"].each { |group| -%>
             <item>
-              <groupId><%=inst_map["netfilter_group_id"][i]%></groupId>
-              <groupName><%=group%></groupName>
+              <groupId><%=group%></groupId>
+              <groupName></groupName>
             </item>
 <%- } -%>
           </groupSet>
@@ -335,15 +337,16 @@ __END
     end
     
     def run_instances_response(account_id,inst_maps)
+      p inst_maps
       ERB.new(<<__END, nil, '-').result(binding)
 <RunInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2011-07-15/">
   <requestId></requestId>
   <reservationId></reservationId>
   <ownerId><%= account_id %></ownerId>
   <groupSet>
-<%- inst_maps.first["netfilter_group"].each_with_index { |group,i| -%>
+<%- inst_maps.first["netfilter_groups"].each { |group| -%>
       <item>
-        <groupId><%=inst_maps.first["netfilter_group_id"][i]%></groupId>
+        <groupId><%=group%></groupId>
       </item>
 <%- } -%>
   </groupSet>
