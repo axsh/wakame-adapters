@@ -276,7 +276,7 @@ __END
           <ipAddress><%=inst_map["vif"].first["ipv4"]["nat_address"] unless inst_map["vif"].nil? || inst_map["vif"].empty? || inst_map["vif"].first["ipv4"].nil? %></ipAddress>
           <sourceDestCheck></sourceDestCheck>
           <groupSet>
-<%- inst_map["netfilter_groups"].each { |group| -%>
+<%- inst_map["security_groups"].each { |group| -%>
             <item>
               <groupId><%=group%></groupId>
               <groupName></groupName>
@@ -343,7 +343,7 @@ __END
   <reservationId></reservationId>
   <ownerId><%= account_id %></ownerId>
   <groupSet>
-<%- inst_maps.first["netfilter_groups"].each { |group| -%>
+<%- inst_maps.first["security_groups"].each { |group| -%>
       <item>
         <groupId><%=group%></groupId>
       </item>
